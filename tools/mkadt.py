@@ -39,6 +39,35 @@ VTIMER_INTID = 19
 QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE = 0x08000000, 0x080a0000, 62500000
 QEMU_VTIMER_INTID = 27
 
+# --- cepheus (Xiaomi Mi 9, SM8150/Snapdragon 855) ----------------------------
+# Sources: cepheus-q-oss dts (see 07 doc), live adb. TBD items marked below.
+CEPH_SOC_COMPAT = 'qcom,sm8150'
+CEPH_UFS, CEPH_UFS_SIZE = 0x01d84000, 0x3000  # ufshc@1d84000 — same address as SM7150
+CEPH_GICD, CEPH_GICR = 0x17a00000, 0x17a60000  # same as SM7150 (qcom keeps GIC here)
+# SM8150 Kryo485: 4x Kryo Silver (A55 @1.79GHz, MPIDR 0x0-0x3, cluster 0),
+# 3x Gold (A76 @2.42GHz, MPIDR 0x100-0x102, cluster 1), 1x Gold prime
+# (A76 @2.84GHz, MPIDR 0x300, cluster 2). Source: standard sm8150 CPU map.
+CEPH_CPUS = [  # (mpidr, cluster, cluster_core, freq_hz, is_a76)
+    (0x000, 0, 0, 1785600000, False),
+    (0x001, 0, 1, 1785600000, False),
+    (0x002, 0, 2, 1785600000, False),
+    (0x003, 0, 3, 1785600000, False),
+    (0x100, 1, 0, 2419200000, True),
+    (0x101, 1, 1, 2419200000, True),
+    (0x102, 1, 2, 2419200000, True),
+    (0x300, 2, 0, 2841600000, True),
+]
+# TBD(probe): ABL framebuffer address on cepheus — sweet's 0x9c000000 is an
+# SM7150 ABL artifact. Probe with a first fastboot boot (console prints the
+# panel memory the shim inherits from the live FDT) before real boot.
+CEPH_FB, CEPH_FB_SIZE = 0x9c000000, 0x1700000
+CEPH_FB_W, CEPH_FB_H, CEPH_FB_STRIDE = 1080, 2340, 1080 * 4
+# TBD(probe): upper DDR bank size per RAM variant. SM8150 8GB upper bank is
+# roughly 0x100000000..0x1DFFFFFFF; verify against the live FDT memory node
+# (recovery: /sys/firmware/devicetree) before flashing. Conservative default.
+CEPH_HIGH_PHYS_BASE = 0x100000000
+CEPH_HIGH_MEM_SIZE = 0xdf800000  # 3.5 GiB — TBD(probe), see above
+
 BOOT_MANIFEST_HASH = hashlib.sha384(b'sweet boot manifest').digest()
 
 # The iOS userland is the iPhone X (iPhone10,3 / D22AP) IPSW. MobileGestalt
@@ -74,9 +103,13 @@ def node(name, props=(), children=()):
     return n
 
 
-def build(seed=None, qemu=False, highmem=False):
-    """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
-    phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
+def build(seed=None, qemu=False, highmem=False, cepheus=False):
+    """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py).
+    cepheus=True: Xiaomi Mi 9 (SM8150) SoC identity, CPU topology and addresses."""
+    if cepheus:
+        phys_base, mem_size = CEPH_HIGH_PHYS_BASE, CEPH_HIGH_MEM_SIZE
+    else:
+        phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
     # Carve the panic log off the top so the kernel never allocates over it.
     panic_base = phys_base + mem_size - PANIC_LOG_SIZE
     mem_size -= PANIC_LOG_SIZE
@@ -133,28 +166,52 @@ def build(seed=None, qemu=False, highmem=False):
     # 6-7 Cortex-A76), one homogeneous cluster. The kernel defaults to one
     # and uses cpus=N to select an initial prefix (N <= 8).
     # QEMU retains its original single-CPU tree: its MPIDRs differ from sweet.
+    # cepheus: SM8150 Kryo485 topology, three clusters (see CEPH_CPUS).
     cpu_nodes = []
-    for core in range(1 if qemu else 8):
-        cpu_nodes.append(node(f'cpu{core}', [
-            ph(),
-            ('device_type', cstr('cpu')),
-            ('compatible', cstr('qcom,kryo470') + cstr('ARM,v8')),
-            ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
-            ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
-            ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology
-            ('cluster-type', u32(0)),  # homogeneous CLUSTER_TYPE_SMP, not AMP
-            ('die-cluster-id', u32(0)),
-            ('cluster-core-id', u32(core)),
-            ('l2-cache-id', u32(core)),  # distinct per-core L2 nodes in live FDT
-            ('l3-cache-id', u32(0)),     # shared L3
-            ('state', cstr('running' if core == 0 else 'stopped')),
-            ('timebase-frequency', u32(timebase)),
-            ('clock-frequency', u32(2304000000 if core >= 6 else 1804800000)),
-            ('bus-frequency', u32(100000000)),
-            ('memory-frequency', u32(1866000000)),
-            ('peripheral-frequency', u32(timebase)),
-            ('fixed-frequency', u32(timebase)),
-        ]))
+    if cepheus and not qemu:
+        for core, (mpidr, cluster, ccore, freq, is_a76) in enumerate(CEPH_CPUS):
+            cpu_nodes.append(node(f'cpu{core}', [
+                ph(),
+                ('device_type', cstr('cpu')),
+                ('compatible', cstr('qcom,kryo485') + cstr('ARM,v8')),
+                ('reg', u32(mpidr)),  # actual MPIDR Aff2:Aff1:Aff0, NOT logical ID
+                ('cpu-id', u32(core)),
+                ('cluster-id', u32(cluster)),
+                ('cluster-type', u32(0)),  # homogeneous CLUSTER_TYPE_SMP, not AMP
+                ('die-cluster-id', u32(cluster)),
+                ('cluster-core-id', u32(ccore)),
+                ('l2-cache-id', u32(core)),
+                ('l3-cache-id', u32(cluster)),
+                ('state', cstr('running' if core == 0 else 'stopped')),
+                ('timebase-frequency', u32(timebase)),
+                ('clock-frequency', u32(freq)),
+                ('bus-frequency', u32(100000000)),
+                ('memory-frequency', u32(1866000000)),
+                ('peripheral-frequency', u32(timebase)),
+                ('fixed-frequency', u32(timebase)),
+            ]))
+    else:
+        for core in range(1 if qemu else 8):
+            cpu_nodes.append(node(f'cpu{core}', [
+                ph(),
+                ('device_type', cstr('cpu')),
+                ('compatible', cstr('qcom,kryo470') + cstr('ARM,v8')),
+                ('reg', u32(core << 8)),  # actual MPIDR Aff1:Aff0, NOT logical ID
+                ('cpu-id', u32(core)),   # descriptive: XNU assigns IDs by DT order
+                ('cluster-id', u32(0)),  # descriptive; see ml_parse_cpu_topology
+                ('cluster-type', u32(0)),  # homogeneous CLUSTER_TYPE_SMP, not AMP
+                ('die-cluster-id', u32(0)),
+                ('cluster-core-id', u32(core)),
+                ('l2-cache-id', u32(core)),  # distinct per-core L2 nodes in live FDT
+                ('l3-cache-id', u32(0)),     # shared L3
+                ('state', cstr('running' if core == 0 else 'stopped')),
+                ('timebase-frequency', u32(timebase)),
+                ('clock-frequency', u32(2304000000 if core >= 6 else 1804800000)),
+                ('bus-frequency', u32(100000000)),
+                ('memory-frequency', u32(1866000000)),
+                ('peripheral-frequency', u32(timebase)),
+                ('fixed-frequency', u32(timebase)),
+            ]))
     cpus = node('cpus', [ph(), ('#address-cells', u32(1)),
                          ('#size-cells', u32(0))], cpu_nodes)
 
@@ -191,17 +248,17 @@ def build(seed=None, qemu=False, highmem=False):
 
     fbcon = node('sweet-fbcon', [
         ph(),
-        ('reg', u64(FB, FB_SIZE)),
-        ('width', u32(FB_W)),
-        ('height', u32(FB_H)),
-        ('stride', u32(FB_STRIDE)),
+        ('reg', u64(CEPH_FB if cepheus else FB, CEPH_FB_SIZE if cepheus else FB_SIZE)),
+        ('width', u32(CEPH_FB_W if cepheus else FB_W)),
+        ('height', u32(CEPH_FB_H if cepheus else FB_H)),
+        ('stride', u32(CEPH_FB_STRIDE if cepheus else FB_STRIDE)),
     ])
 
     # bsd/dev/sweet_ufs.c: the UFS host ABL leaves running (absolute physical reg).
     ufs = node('sweet-ufs', [
         ph(),
         ('compatible', cstr('qcom,ufshc')),
-        ('reg', u64(UFS, UFS_SIZE)),
+        ('reg', u64(CEPH_UFS if cepheus else UFS, CEPH_UFS_SIZE if cepheus else UFS_SIZE)),
     ])
 
     # pmap_compute_max_asids requires the node even when no overrides are set.
@@ -228,10 +285,13 @@ def build(seed=None, qemu=False, highmem=False):
 
     # Identity of the iPhone X whose userland runs here: compatible[0] is
     # hw.model/hw.target (D22AP), model is hw.machine/hw.product
-    # (iPhone10,3). 'xiaomi,sweet' stays for SweetPlatformExpert matching.
+    # (iPhone10,3). 'xiaomi,sweet'/'xiaomi,cepheus' stays for
+    # SweetPlatformExpert matching.
+    soc_compat = CEPH_SOC_COMPAT if cepheus else 'qcom,sm7150'
+    platform_compat = 'xiaomi,cepheus' if cepheus else 'xiaomi,sweet'
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr('xiaomi,sweet') + cstr('qcom,sm7150') + cstr('AppleARM')),
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr(platform_compat) + cstr(soc_compat) + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),
@@ -242,7 +302,8 @@ def build(seed=None, qemu=False, highmem=False):
 
 
 if __name__ == '__main__':
-    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv)
+    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv,
+                 cepheus='--cepheus' in sys.argv)
     blob = adt.serialize(root)
     open(sys.argv[1], 'wb').write(blob)
     if '--dump' in sys.argv:

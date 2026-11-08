@@ -1,6 +1,6 @@
 diff --git a/config/MASTER.arm64.cepheus b/config/MASTER.arm64.cepheus
 new file mode 100644
-index 0000000..d7ea816
+index 0000000..a990ff3
 --- /dev/null
 +++ b/config/MASTER.arm64.cepheus
 @@ -0,0 +1,115 @@
@@ -37,7 +37,7 @@ index 0000000..d7ea816
 +#  BSD_RELEASE =    [ BSD_BASE ]
 +#  BSD_DEV =        [ BSD_BASE config_vnguard ]
 +#  BSD_DEBUG =      [ BSD_BASE config_vnguard ]
-+#  FILESYS_BASE =   [ devfs fdesc fifo mockfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_searchfs config_volfs config_appledouble nullfs bindfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
++#  FILESYS_BASE =   [ devfs fdesc fifo mockfs sweet_hfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_searchfs config_volfs config_appledouble nullfs bindfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
 +#  FILESYS_RELEASE= [ FILESYS_BASE ]
 +#  FILESYS_DEV =    [ FILESYS_BASE config_iocount_trace ]
 +#  FILESYS_DEBUG =  [ FILESYS_BASE config_iocount_trace ]
@@ -120,7 +120,7 @@ index 0000000..d7ea816
 +options   CONFIG_RESLIDE_SHARED_CACHE		# <reslide_shared_cache>
 +options   CONFIG_KERNEL_TBI		# <kernel_tbi>
 diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
-index 69b13f9..953e2f0 100644
+index 69b13f9..bcd2a8f 100644
 --- a/makedefs/MakeInc.def
 +++ b/makedefs/MakeInc.def
 @@ -29,7 +29,7 @@ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
@@ -136,7 +136,7 @@ index 69b13f9..953e2f0 100644
  MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a
  MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
  MACHINE_FLAGS_ARM64_SWEET = -DARM64_BOARD_CONFIG_SWEET                -march=armv8.2-a+crypto
-+MACHINE_FLAGS_ARM64_CEPHEUS = -DARM64_BOARD_CONFIG_CEPHEUS            -march=armv8.2-a+crypto
++MACHINE_FLAGS_ARM64_CEPHEUS = -DARM64_BOARD_CONFIG_CEPHEUS -DARM64_BOARD_CONFIG_SWEET -march=armv8.2-a+crypto
  
  
  #
@@ -151,248 +151,18 @@ index 69b13f9..953e2f0 100644
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
  endif
  endif
-diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
-index e01c124..82f23da 100644
---- a/osfmk/arm64/proc_reg.h
-+++ b/osfmk/arm64/proc_reg.h
-@@ -221,6 +221,14 @@
- /* D-Cache. */
- #define MMU_CLINE   6
- 
-+#elif defined (CEPHEUS) /* Qualcomm Kryo 485: Cortex-A76 + Cortex-A55 */
-+
-+/* I-Cache. */
-+#define MMU_I_CLINE 6
-+
-+/* D-Cache. */
-+#define MMU_CLINE   6
-+
- #elif defined (VMAPPLE)
- 
- /* I-Cache. */
-diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
-index 24f1abc..68c6c25 100644
---- a/osfmk/arm64/sleh.c
-+++ b/osfmk/arm64/sleh.c
-@@ -1856,7 +1856,7 @@ sleh_irq(arm_saved_state_t *state)
- #endif
- 
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- 	/*
- 	 * sweet: TrustZone owns GIC Group 0, so the timer and IPIs that other
- 	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
-diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
-index 023086f..a0f5f77 100644
---- a/osfmk/arm64/start.s
-+++ b/osfmk/arm64/start.s
-@@ -837,11 +837,11 @@ common_start:
- 	MSR_SCTLR_EL1_X0
- 	isb		sy
- 
--#if !VMAPPLE && !defined(SWEET)
-+#if !VMAPPLE && !defined(SWEET) && !defined(CEPHEUS)
- 	MOV64   x1, SCTLR_EL1_DEFAULT
- 	cmp		x0, x1
- 	bne		.
--#endif /* !VMAPPLE && !SWEET */
-+#endif /* !VMAPPLE && !SWEET && !CEPHEUS */
- 
- #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
- 	/* Watchtower
-diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
-index 6089db9..7632a87 100644
---- a/pexpert/arm/pe_fiq.c
-+++ b/pexpert/arm/pe_fiq.c
-@@ -17,7 +17,7 @@
- #define GICR_WAKE_TIMEOUT_NS (1000000000ULL) // timeout for redistributor wakeup (default 1s)
- MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- /* Phone default; QEMU virt wires the architected virtual timer to INTID 27. */
- SECURITY_READ_ONLY_LATE(uint32_t) sweet_vtimer_intid = SWEET_VTIMER_INTID;
- #endif
-@@ -102,7 +102,7 @@ pe_init_fiq()
- 			panic("%s: incorrect reg property size in GIC DT node; expecting 32 bytes but got %u bytes", __func__, prop_size);
- 		}
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- 		/* Read only on the boot CPU, before the GIC and RO-late lockdown. */
- 		void const *timer_prop;
- 		unsigned int timer_size;
-@@ -164,7 +164,7 @@ pe_init_fiq()
- 		}
- 	}
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- 	/*
- 	 * Real hardware with two security states: Group 0 is TrustZone's and
- 	 * non-secure writes to it are ignored. Everything we own is Group 1 NS
-@@ -190,7 +190,7 @@ pe_init_fiq()
- 	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
- 	__builtin_arm_isb(ISB_SY);
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- 	__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
- #else
- 	// Set priority masks and binary point for group 0
-@@ -203,7 +203,7 @@ pe_init_fiq()
- 	icc_ctlr &= ~ICC_CTLR_EOIMODE;
- 	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
- 
--#if defined(SWEET)
-+#if defined(SWEET) || defined(CEPHEUS)
- 	// ABL leaves only ARE_NS set; Linux writes ARE_NS | EnableGrp1A | EnableGrp1
- 	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
- 	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_ENABLEGRP1A | GICD_CTLR_ENABLEGRP1;
-diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
-index 9004f2b..512bb01 100644
---- a/pexpert/pexpert/arm/protos.h
-+++ b/pexpert/pexpert/arm/protos.h
-@@ -36,7 +36,7 @@ void uart_putc_options(char, bool);
- int uart_getc(void);
- 
- void pe_init_fiq(void);
--#if defined(ARM64_BOARD_CONFIG_SWEET)
-+#if defined(ARM64_BOARD_CONFIG_SWEET) || defined(ARM64_BOARD_CONFIG_CEPHEUS)
- extern uint32_t sweet_vtimer_intid;
- #endif
- 
-diff --git a/pexpert/pexpert/arm64/CEPHEUS.h b/pexpert/pexpert/arm64/CEPHEUS.h
-new file mode 100644
-index 0000000..87aa002
---- /dev/null
-+++ b/pexpert/pexpert/arm64/CEPHEUS.h
-@@ -0,0 +1,88 @@
-+/*
-+ * Board config for the Xiaomi Mi 9 ("cepheus", Qualcomm SM8150 /
-+ * Snapdragon 855): Kryo 485 = 4x Cortex-A55 + 4x Cortex-A76, ARMv8.2.
-+ *
-+ * Generic ARM like BCM2837 (no APPLE_ARM64_ARCH_FAMILY: none of Apple's
-+ * implementation-defined system registers exist), 16K pages and GICv3 like
-+ * VMAPPLE. Unlike VMAPPLE the GIC has two security states (GICD_TYPER
-+ * SecurityExtn=1): Group 0 belongs to TrustZone, so every interrupt,
-+ * including the timer, is a Group 1 IRQ taken through sleh_irq().
-+ */
-+
-+#ifndef _PEXPERT_ARM64_CEPHEUS_H
-+#define _PEXPERT_ARM64_CEPHEUS_H
-+
-+#define NO_MONITOR                1
-+#define NO_ECORE                  1
-+
-+#define CEPHEUS                     1
-+
-+/*
-+ * NOTE: SWEET_VTIMER_INTID / SWEET_IPI_SGI names are intentionally kept
-+ * (sleh.c / pe_fiq.c guards are shared between SWEET and CEPHEUS).
-+ */
-+
-+/*
-+ * All eight cores (six A55 + two A76) as one homogeneous SMP cluster:
-+ * cpus=N is clamped here. Same ISA level (ARMv8.2), 64-byte lines, PSCI
-+ * CPU_ON; the scheduler does not know the A76s are faster (no AMP/P-E
-+ * clusters yet).
-+ */
-+#define SWEET_SMP_MAX_CPUS         8
-+
-+#define ARM_ARCH_TIMER
-+#define __ARM_ARCH__              8
-+#define __ARM_VMSA__              8
-+#define __ARM_VFP__               4
-+#define __ARM_COHERENT_CACHE__    1
-+#define __ARM_DEBUG__             7
-+#define __ARM_ENABLE_SWAP__       1
-+#define __ARM_V8_CRYPTO_EXTENSIONS__ 1
-+#define __ARM_PAN_AVAILABLE__     1
-+#define __ARM_16K_PG__            1
-+
-+#define HAS_GIC_V3                1
-+
-+#ifndef ASSEMBLER
-+#define PLATFORM_PANIC_LOG_DISABLED
-+#endif /* ! ASSEMBLER */
-+
-+/*
-+ * Qualcomm numbers the architected timer PPIs 1/2/3/0 (secure phys, phys,
-+ * virt, hyp) instead of the usual 13/14/11/10: the virtual timer XNU uses
-+ * (CNTV) is INTID 16 + 3 = 19.
-+ */
-+#define SWEET_VTIMER_INTID        19
-+#define SWEET_IPI_SGI             1       // SGI used for cross-CPU signals
-+
-+#define GIC_SPURIOUS_IRQ          1023    // IRQ no. for GIC spurious interrupt
-+
-+#define GICR_PE_SIZE              0x20000 // Size of each redistributor region
-+
-+/* GICv3 register definitions; see GICv3 spec (Arm IHI 0069G) */
-+#define GICD_CTLR                 0x0
-+
-+/* Non-secure view of GICD_CTLR (DS=0) */
-+#define GICD_CTLR_ENABLEGRP1      0x1
-+#define GICD_CTLR_ENABLEGRP1A     0x2
-+#define GICD_CTLR_ARE_NS          0x10
-+#define GICD_CTLR_RWP             0x80000000
-+
-+#define GICR_TYPER                              0x08
-+#define GICR_WAKER                              0x14
-+#define GICR_IGROUPR0                           0x10080
-+#define GICR_ISENABLER0                         0x10100
-+#define GICR_IPRIORITYR0                        0x10400
-+
-+#define GICR_TYPER_AFFINITY_VALUE_SHIFT         32
-+#define GICR_TYPER_LAST                         0x10
-+
-+#define GICR_WAKER_PROCESSORSLEEP               0x2
-+#define GICR_WAKER_CHILDRENASLEEP               0x4
-+
-+#define ICC_CTLR_EOIMODE                        0x2
-+
-+#define ICC_SRE_SRE                             0x1
-+/* End of GICv3 register definitions */
-+
-+#endif /* ! _PEXPERT_ARM64_CEPHEUS_H */
-diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
-index c7d274f..8e2099f 100644
---- a/pexpert/pexpert/arm64/Makefile
-+++ b/pexpert/pexpert/arm64/Makefile
-@@ -18,7 +18,8 @@ PRIVATE_KERNELFILES = \
- 	H13.h \
- 	VMAPPLE.h \
- 	BCM2837.h \
--	SWEET.h
-+	SWEET.h \
-+	CEPHEUS.h
- 
- 
- # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
 diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
-index 88e524a..a844c48 100644
+index 88e524a..8f1a52d 100644
 --- a/pexpert/pexpert/arm64/board_config.h
 +++ b/pexpert/pexpert/arm64/board_config.h
-@@ -107,6 +107,21 @@
+@@ -107,6 +107,11 @@
  #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
  
  #endif  /* ARM64_BOARD_CONFIG_SWEET */
 +#ifdef ARM64_BOARD_CONFIG_CEPHEUS
-+/*
-+ * CEPHEUS is a SWEET-family board at the code level: reuse SWEET.h's arch
-+ * capability defines and GIC model wholesale (its SWEET_VTIMER_INTID etc.
-+ * fire every original SWEET guard), overriding only the CPU cluster count.
-+ */
-+#include <pexpert/arm64/SWEET.h>
-+
-+#define MAX_L2_CLINE                   6
-+#define MAX_CPUS                       8
++/* SM8150: 3 clusters (4x A55 + 3x A76 + 1x prime) vs SWEET's single cluster. */
++#undef MAX_CPU_CLUSTERS
 +#define MAX_CPU_CLUSTERS               3
-+
-+#define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
-+
 +#endif  /* ARM64_BOARD_CONFIG_CEPHEUS */
  
  #ifdef ARM64_BOARD_CONFIG_VMAPPLE

@@ -1,7 +1,8 @@
 diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+index 69b13f9..06bd24b 100644
 --- a/makedefs/MakeInc.def
 +++ b/makedefs/MakeInc.def
-@@ -29,6 +29,6 @@
+@@ -29,7 +29,7 @@ SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
  else ifneq ($(findstring _host,$(RC_ProjectName)),)
  SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
  else
@@ -9,43 +10,29 @@ diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 +SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET CEPHEUS
  
  endif
-diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
---- a/makedefs/MakeInc.def
-+++ b/makedefs/MakeInc.def
-@@ -62,6 +62,7 @@
- MACHINE_FLAGS_ARM64_T6000 = -DARM64_BOARD_CONFIG_T6000 		-mcpu=apple-a14
+ 
+@@ -62,6 +62,7 @@ MACHINE_FLAGS_ARM64_T6000 = -DARM64_BOARD_CONFIG_T6000 		-mcpu=apple-a14
  MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a
  MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
  MACHINE_FLAGS_ARM64_SWEET = -DARM64_BOARD_CONFIG_SWEET                -march=armv8.2-a+crypto
 +MACHINE_FLAGS_ARM64_CEPHEUS = -DARM64_BOARD_CONFIG_CEPHEUS            -march=armv8.2-a+crypto
  
  
-diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
---- a/makedefs/MakeInc.def
-+++ b/makedefs/MakeInc.def
-@@ -260,8 +260,8 @@
- # Without embdedded device map, use a default arch string
+ #
+@@ -261,7 +262,7 @@ ifeq ($(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG),)
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
  ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
--# sweet's Cortex-A76/A55 have no pointer authentication: stay plain arm64
+ # sweet's Cortex-A76/A55 have no pointer authentication: stay plain arm64
 -ifneq ($(CURRENT_MACHINE_CONFIG),SWEET)
-+# sweet/cepheus Cortex-A76/A55: no pointer authentication yet, stay plain arm64
 +ifneq ($(filter SWEET CEPHEUS,$(CURRENT_MACHINE_CONFIG)),)
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
  endif
  endif
 diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+index e01c124..82f23da 100644
 --- a/osfmk/arm64/proc_reg.h
 +++ b/osfmk/arm64/proc_reg.h
-@@ -213,12 +213,20 @@
- /* D-Cache. */
- #define MMU_CLINE   6
- 
- #elif defined (SWEET) /* Qualcomm Kryo 470: Cortex-A76 + Cortex-A55 */
- 
- /* I-Cache. */
- #define MMU_I_CLINE 6
- 
+@@ -221,6 +221,14 @@
  /* D-Cache. */
  #define MMU_CLINE   6
  
@@ -57,11 +44,14 @@ diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
 +/* D-Cache. */
 +#define MMU_CLINE   6
 +
+ #elif defined (VMAPPLE)
  
+ /* I-Cache. */
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+index 24f1abc..68c6c25 100644
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -1857,7 +1857,7 @@
+@@ -1856,7 +1856,7 @@ sleh_irq(arm_saved_state_t *state)
  #endif
  
  
@@ -71,37 +61,47 @@ diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
  	 * sweet: TrustZone owns GIC Group 0, so the timer and IPIs that other
  	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index 023086f..a0f5f77 100644
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -745,10 +745,10 @@
+@@ -837,11 +837,11 @@ common_start:
  	MSR_SCTLR_EL1_X0
  	isb		sy
  
--#if !VMAPPLE
+-#if !VMAPPLE && !defined(SWEET)
 +#if !VMAPPLE && !defined(SWEET) && !defined(CEPHEUS)
  	MOV64   x1, SCTLR_EL1_DEFAULT
  	cmp		x0, x1
  	bne		.
--#endif /* !VMAPPLE */
+-#endif /* !VMAPPLE && !SWEET */
 +#endif /* !VMAPPLE && !SWEET && !CEPHEUS */
  
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
+ 	/* Watchtower
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
+index 6089db9..7632a87 100644
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
-@@ -141,7 +141,7 @@
- #endif
- 
+@@ -17,7 +17,7 @@
+ #define GICR_WAKE_TIMEOUT_NS (1000000000ULL) // timeout for redistributor wakeup (default 1s)
+ MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
  
 -#if defined(SWEET)
 +#if defined(SWEET) || defined(CEPHEUS)
- 	/*
- 	 * sweet: TrustZone owns GIC Group 0, so the timer and IPIs that other
- 	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
-diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
---- a/pexpert/arm/pe_fiq.c
-+++ b/pexpert/arm/pe_fiq.c
-@@ -168,6 +168,6 @@
+ /* Phone default; QEMU virt wires the architected virtual timer to INTID 27. */
+ SECURITY_READ_ONLY_LATE(uint32_t) sweet_vtimer_intid = SWEET_VTIMER_INTID;
+ #endif
+@@ -102,7 +102,7 @@ pe_init_fiq()
+ 			panic("%s: incorrect reg property size in GIC DT node; expecting 32 bytes but got %u bytes", __func__, prop_size);
+ 		}
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(CEPHEUS)
+ 		/* Read only on the boot CPU, before the GIC and RO-late lockdown. */
+ 		void const *timer_prop;
+ 		unsigned int timer_size;
+@@ -164,7 +164,7 @@ pe_init_fiq()
+ 		}
  	}
  
 -#if defined(SWEET)
@@ -109,10 +109,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
  	/*
  	 * Real hardware with two security states: Group 0 is TrustZone's and
  	 * non-secure writes to it are ignored. Everything we own is Group 1 NS
-diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
---- a/pexpert/arm/pe_fiq.c
-+++ b/pexpert/arm/pe_fiq.c
-@@ -180,7 +180,7 @@
+@@ -190,7 +190,7 @@ pe_init_fiq()
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
@@ -121,22 +118,21 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
  	__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
  #else
  	// Set priority masks and binary point for group 0
-diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
---- a/pexpert/pexpert/arm64/Makefile
-+++ b/pexpert/pexpert/arm64/Makefile
-@@ -17,5 +17,6 @@
- 	H13.h \
- 	VMAPPLE.h \
- 	BCM2837.h
- 	BCM2837.h \
--	SWEET.h
-+	SWEET.h \
-+	CEPHEUS.h
+@@ -203,7 +203,7 @@ pe_init_fiq()
+ 	icc_ctlr &= ~ICC_CTLR_EOIMODE;
+ 	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
+ 
+-#if defined(SWEET)
++#if defined(SWEET) || defined(CEPHEUS)
+ 	// ABL leaves only ARE_NS set; Linux writes ARE_NS | EnableGrp1A | EnableGrp1
+ 	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
+ 	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_ENABLEGRP1A | GICD_CTLR_ENABLEGRP1;
 diff --git a/pexpert/pexpert/arm64/CEPHEUS.h b/pexpert/pexpert/arm64/CEPHEUS.h
 new file mode 100644
+index 0000000..87aa002
 --- /dev/null
 +++ b/pexpert/pexpert/arm64/CEPHEUS.h
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,88 @@
 +/*
 + * Board config for the Xiaomi Mi 9 ("cepheus", Qualcomm SM8150 /
 + * Snapdragon 855): Kryo 485 = 4x Cortex-A55 + 4x Cortex-A76, ARMv8.2.
@@ -160,6 +156,14 @@ new file mode 100644
 + * NOTE: SWEET_VTIMER_INTID / SWEET_IPI_SGI names are intentionally kept
 + * (sleh.c / pe_fiq.c guards are shared between SWEET and CEPHEUS).
 + */
++
++/*
++ * All eight cores (six A55 + two A76) as one homogeneous SMP cluster:
++ * cpus=N is clamped here. Same ISA level (ARMv8.2), 64-byte lines, PSCI
++ * CPU_ON; the scheduler does not know the A76s are faster (no AMP/P-E
++ * clusters yet).
++ */
++#define SWEET_SMP_MAX_CPUS         8
 +
 +#define ARM_ARCH_TIMER
 +#define __ARM_ARCH__              8
@@ -217,17 +221,25 @@ new file mode 100644
 +/* End of GICv3 register definitions */
 +
 +#endif /* ! _PEXPERT_ARM64_CEPHEUS_H */
+diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
+index c7d274f..8e2099f 100644
+--- a/pexpert/pexpert/arm64/Makefile
++++ b/pexpert/pexpert/arm64/Makefile
+@@ -18,7 +18,8 @@ PRIVATE_KERNELFILES = \
+ 	H13.h \
+ 	VMAPPLE.h \
+ 	BCM2837.h \
+-	SWEET.h
++	SWEET.h \
++	CEPHEUS.h
+ 
+ 
+ # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
 diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
+index 88e524a..73e7971 100644
 --- a/pexpert/pexpert/arm64/board_config.h
 +++ b/pexpert/pexpert/arm64/board_config.h
-@@ -100,13 +100,23 @@
- #ifdef ARM64_BOARD_CONFIG_SWEET
- #include <pexpert/arm64/SWEET.h>
- 
- #define MAX_L2_CLINE                   6
- #define MAX_CPUS                       8
- #define MAX_CPU_CLUSTERS               1
- 
+@@ -107,6 +107,16 @@
  #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
  
  #endif  /* ARM64_BOARD_CONFIG_SWEET */

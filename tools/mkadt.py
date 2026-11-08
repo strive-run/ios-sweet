@@ -288,10 +288,14 @@ def build(seed=None, qemu=False, highmem=False, cepheus=False):
     # (iPhone10,3). 'xiaomi,sweet'/'xiaomi,cepheus' stays for
     # SweetPlatformExpert matching.
     soc_compat = CEPH_SOC_COMPAT if cepheus else 'qcom,sm7150'
+    # 'xiaomi,sweet' MUST stay in the list: SweetPlatformExpert's IONameMatch
+    # is 'xiaomi,sweet' (0016), and the CEPHEUS kernel keeps the SWEET board
+    # family at the code level. 'xiaomi,cepheus' is informational.
     platform_compat = 'xiaomi,cepheus' if cepheus else 'xiaomi,sweet'
+    family_compat = 'xiaomi,sweet'
     return node('device-tree', [
         ph(),
-        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr(platform_compat) + cstr(soc_compat) + cstr('AppleARM')),
+        ('compatible', cstr('D22AP') + cstr('iPhone10,3') + cstr(platform_compat) + (cstr(family_compat) if cepheus else cstr(platform_compat)) + cstr(soc_compat) + cstr('AppleARM')),
         ('model', cstr('iPhone10,3')),
         ('target-type', cstr('D22')),
         ('target-sub-type', cstr('D22AP')),

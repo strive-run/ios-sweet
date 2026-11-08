@@ -1,10 +1,10 @@
 diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 --- a/makedefs/MakeInc.def
 +++ b/makedefs/MakeInc.def
-@@ -1,6 +1,6 @@
+@@ -29,6 +29,6 @@
+ else ifneq ($(findstring _host,$(RC_ProjectName)),)
  SUPPORTED_ARM64_MACHINE_CONFIGS = NONE
  else
- SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE
 -SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET
 +SUPPORTED_ARM64_MACHINE_CONFIGS = BCM2837 T6000 T8101 T8103 VMAPPLE SWEET CEPHEUS
  
@@ -12,7 +12,7 @@ diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 --- a/makedefs/MakeInc.def
 +++ b/makedefs/MakeInc.def
-@@ -1,6 +1,7 @@
+@@ -62,6 +62,7 @@
  MACHINE_FLAGS_ARM64_T6000 = -DARM64_BOARD_CONFIG_T6000 		-mcpu=apple-a14
  MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a
  MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
@@ -23,7 +23,7 @@ diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 --- a/makedefs/MakeInc.def
 +++ b/makedefs/MakeInc.def
-@@ -1,8 +1,8 @@
+@@ -260,8 +260,8 @@
  # Without embdedded device map, use a default arch string
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
  ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
@@ -37,7 +37,7 @@ diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
 diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
 --- a/osfmk/arm64/proc_reg.h
 +++ b/osfmk/arm64/proc_reg.h
-@@ -1,13 +1,21 @@
+@@ -213,12 +213,20 @@
  /* D-Cache. */
  #define MMU_CLINE   6
  
@@ -58,13 +58,13 @@ diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
 +#define MMU_CLINE   6
 +
  
- #elif defined (VMAPPLE)
 diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
 --- a/osfmk/arm64/sleh.c
 +++ b/osfmk/arm64/sleh.c
-@@ -1,6 +1,6 @@
+@@ -1857,7 +1857,7 @@
+ #endif
  
- 	entropy_collect();
+ 
 -#if defined(SWEET)
 +#if defined(SWEET) || defined(CEPHEUS)
  	/*
@@ -73,7 +73,7 @@ diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -1,10 +1,10 @@
+@@ -745,10 +745,10 @@
  	MSR_SCTLR_EL1_X0
  	isb		sy
  
@@ -89,7 +89,7 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
-@@ -1,7 +1,7 @@
+@@ -141,7 +141,7 @@
  #endif
  
  
@@ -101,8 +101,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
-@@ -1,7 +1,7 @@
- 		}
+@@ -168,6 +168,6 @@
  	}
  
 -#if defined(SWEET)
@@ -113,7 +112,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
-@@ -1,7 +1,7 @@
+@@ -180,7 +180,7 @@
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
@@ -125,7 +124,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
 diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
 --- a/pexpert/pexpert/arm64/Makefile
 +++ b/pexpert/pexpert/arm64/Makefile
-@@ -1,5 +1,6 @@
+@@ -17,5 +17,6 @@
  	H13.h \
  	VMAPPLE.h \
  	BCM2837.h
@@ -136,10 +135,11 @@ diff --git a/pexpert/pexpert/arm64/Makefile b/pexpert/pexpert/arm64/Makefile
 diff --git a/pexpert/pexpert/arm64/CEPHEUS.h b/pexpert/pexpert/arm64/CEPHEUS.h
 new file mode 100644
 --- /dev/null
-@@ -0,0 +1,92 @@
++++ b/pexpert/pexpert/arm64/CEPHEUS.h
+@@ -0,0 +1,80 @@
 +/*
-+ * Board config for the Redmi Note 10 Pro ("sweet", Qualcomm SM7150 /
-+ * Snapdragon 732G): Kryo 470 = Cortex-A76 + Cortex-A55, ARMv8.2, no PAC.
++ * Board config for the Xiaomi Mi 9 ("cepheus", Qualcomm SM8150 /
++ * Snapdragon 855): Kryo 485 = 4x Cortex-A55 + 4x Cortex-A76, ARMv8.2.
 + *
 + * Generic ARM like BCM2837 (no APPLE_ARM64_ARCH_FAMILY: none of Apple's
 + * implementation-defined system registers exist), 16K pages and GICv3 like
@@ -148,8 +148,8 @@ new file mode 100644
 + * including the timer, is a Group 1 IRQ taken through sleh_irq().
 + */
 +
-+#ifndef _PEXPERT_ARM64_SWEET_H
-+#define _PEXPERT_ARM64_SWEET_H
++#ifndef _PEXPERT_ARM64_CEPHEUS_H
++#define _PEXPERT_ARM64_CEPHEUS_H
 +
 +#define NO_MONITOR                1
 +#define NO_ECORE                  1
@@ -216,23 +216,11 @@ new file mode 100644
 +#define ICC_SRE_SRE                             0x1
 +/* End of GICv3 register definitions */
 +
-+#endif /* ! _PEXPERT_ARM64_SWEET_H */
-+++ b/pexpert/pexpert/arm64/board_config.h
-+#ifdef ARM64_BOARD_CONFIG_SWEET
-+#include <pexpert/arm64/SWEET.h>
-+
-+#define MAX_L2_CLINE                   6
-+#define MAX_CPUS                       8
-+#define MAX_CPU_CLUSTERS               1
-+
-+#define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
-+
-+#endif  /* ARM64_BOARD_CONFIG_SWEET */
-+
++#endif /* ! _PEXPERT_ARM64_CEPHEUS_H */
 diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
 --- a/pexpert/pexpert/arm64/board_config.h
 +++ b/pexpert/pexpert/arm64/board_config.h
-@@ -1,13 +1,23 @@
+@@ -100,13 +100,23 @@
  #ifdef ARM64_BOARD_CONFIG_SWEET
  #include <pexpert/arm64/SWEET.h>
  

@@ -62,11 +62,11 @@ CEPH_CPUS = [  # (mpidr, cluster, cluster_core, freq_hz, is_a76)
 # panel memory the shim inherits from the live FDT) before real boot.
 CEPH_FB, CEPH_FB_SIZE = 0x9c000000, 0x1700000
 CEPH_FB_W, CEPH_FB_H, CEPH_FB_STRIDE = 1080, 2340, 1080 * 4
-# TBD(probe): upper DDR bank size per RAM variant. SM8150 8GB upper bank is
-# roughly 0x100000000..0x1DFFFFFFF; verify against the live FDT memory node
-# (recovery: /sys/firmware/devicetree) before flashing. Conservative default.
+# probed live (TWRP adb root, /proc/iomem 2026-11-08): upper bank is a
+# contiguous System RAM run 0xc0000000..0x27fffffff with no carve-outs inside
+# (all reserved-memory is in the low bank). 8GB device, MemTotal 7.68GB.
 CEPH_HIGH_PHYS_BASE = 0x100000000
-CEPH_HIGH_MEM_SIZE = 0xdf800000  # 3.5 GiB — TBD(probe), see above
+CEPH_HIGH_MEM_SIZE = 0x100000000  # 4 GiB (0x100000000..0x1ffffffff)
 
 BOOT_MANIFEST_HASH = hashlib.sha384(b'sweet boot manifest').digest()
 

@@ -372,21 +372,23 @@ index c7d274f..8e2099f 100644
  
  # Headers installed into System.framework/PrivateHeaders (userspace internal SDK only).
 diff --git a/pexpert/pexpert/arm64/board_config.h b/pexpert/pexpert/arm64/board_config.h
-index 88e524a..73e7971 100644
+index 88e524a..58b5195 100644
 --- a/pexpert/pexpert/arm64/board_config.h
 +++ b/pexpert/pexpert/arm64/board_config.h
-@@ -107,6 +107,16 @@
+@@ -107,6 +107,18 @@
  #define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
  
  #endif  /* ARM64_BOARD_CONFIG_SWEET */
 +#ifdef ARM64_BOARD_CONFIG_CEPHEUS
-+#include <pexpert/arm64/CEPHEUS.h>
++/*
++ * CEPHEUS is a SWEET-family board at the code level: reuse SWEET.h's arch
++ * capability defines and GIC model wholesale (its SWEET_VTIMER_INTID etc.
++ * fire every original SWEET guard), overriding only the CPU cluster count.
++ */
++#include <pexpert/arm64/SWEET.h>
 +
-+#define MAX_L2_CLINE                   6
-+#define MAX_CPUS                       8
++#undef MAX_CPU_CLUSTERS
 +#define MAX_CPU_CLUSTERS               3
-+
-+#define CORE_NCTRS                     8 /* Placeholder; KPC is not enabled for this target */
 +
 +#endif  /* ARM64_BOARD_CONFIG_CEPHEUS */
  

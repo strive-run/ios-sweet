@@ -66,7 +66,7 @@ CEPH_FB_W, CEPH_FB_H, CEPH_FB_STRIDE = 1080, 2340, 1080 * 4
 # contiguous System RAM run 0xc0000000..0x27fffffff with no carve-outs inside
 # (all reserved-memory is in the low bank). 8GB device, MemTotal 7.68GB.
 CEPH_HIGH_PHYS_BASE = 0x100000000
-CEPH_HIGH_MEM_SIZE = 0x100000000  # 4 GiB (0x100000000..0x1ffffffff)
+CEPH_HIGH_MEM_SIZE = 0xfcc00000  # TEST-A: sweet-proven window (family marker isolated)
 
 BOOT_MANIFEST_HASH = hashlib.sha384(b'sweet boot manifest').digest()
 

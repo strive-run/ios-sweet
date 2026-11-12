@@ -294,7 +294,7 @@ static struct block gcc = { "gcc", 0x00100000, 0x80000 };
 #define CBCR_OFF                (1u << 31)      /* ... and whether it is in fact off */
 
 /* dt: reserved-memory cmd_db@80860000: the boot loader's list of what RPMh can switch (cmd-db.c) */
-#define CMD_DB_PHYS             0x80860000UL
+#define CMD_DB_PHYS             0x85f20000UL   /* sm8150: aop_cmd_db memory@85f20000 (0x20000) */
 #define CMD_DB_SIZE             0x20000UL
 
 struct cmd_db_slave {
@@ -396,7 +396,7 @@ step_outside(void)
 	get(&gcc, "gpu_snoc_dvm_gfx", GCC_GPU_SNOC_DVM_GFX_CBCR);
 	get(&gcc, "ddrss_gpu_axi", GCC_DDRSS_GPU_AXI_CBCR);
 
-	announce("look up the GPU's supply rails in the boot loader's list of RPMh resources (memory at 0x80860000)");
+	announce("look up the GPU's supply rails in the boot loader's list of RPMh resources (memory at 0x85f20000)");
 	show_rpmh_resource("gfx.lvl");          /* the 3D core's own rail (dt: VDD_GFX_LEVEL, PM8350C S7) */
 	show_rpmh_resource("cx.lvl");           /* the rail of the CX half, shared with most of the SoC */
 	show_rpmh_resource("mx.lvl");           /* memories */

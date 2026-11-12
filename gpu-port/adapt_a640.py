@@ -109,6 +109,14 @@ adreno = must_sub(adreno,
     '	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00200200);',
     '	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00180000);   /* a640 prim_fifo_threshold (a6xx_catalog.c) */')
 
+# ---------- cmd-db 物理地址（sm8150.dtsi:707 aop_cmd_db@85f20000；sc7280 是 0x80860000）----------
+adreno = must_sub(adreno,
+    '#define CMD_DB_PHYS             0x80860000UL',
+    '#define CMD_DB_PHYS             0x85f20000UL   /* sm8150: aop_cmd_db memory@85f20000 (0x20000) */')
+adreno = must_sub(adreno,
+    'announce("look up the GPU\'s supply rails in the boot loader\'s list of RPMh resources (memory at 0x80860000)");',
+    'announce("look up the GPU\'s supply rails in the boot loader\'s list of RPMh resources (memory at 0x85f20000)");')
+
 # ---------- a6xx.hpp（hakios-metal 用户态芯片事实，fd_devices.py A640 条目 L457-487 + a6xx_gen2 L180-191）----------
 a6xxhpp = must_sub(a6xxhpp,
     'inline constexpr uint32_t kChipId = 0x06030500;',

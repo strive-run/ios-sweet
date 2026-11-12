@@ -3870,10 +3870,10 @@ index 0000000..5b7ba92
 +}
 diff --git a/bsd/dev/hakios_glue.c b/bsd/dev/hakios_glue.c
 new file mode 100644
-index 0000000..d41a0cd
+index 0000000..f35b536
 --- /dev/null
 +++ b/bsd/dev/hakios_glue.c
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,109 @@
 +/*
 + * hakios_glue.c — 小米9 (cepheus) 移植垫片：hakios GPU 驱动依赖的宿主环境入口。
 + *
@@ -3916,6 +3916,72 @@ index 0000000..d41a0cd
 +	}
 +	/* C5.1 后由内嵌 blob 版本替换（gpu-port/README.md 接线 TODO #4） */
 +	return NULL;
++}
++
++/* ---- GPU bring-up glue（cepheus）------------------------------------------------------------------------------------
++ * 上游四个符号来自其 MiniIOMobileFramebuffer / HakiosGPU(IOKit) / tracing 基础设施；本机第一批 bring-up 的等价实现：
++ *   MiniIOMobileFramebufferShow —— 直写 bootloader framebuffer（本机已验证：AppleCLCD 1080x2400 stride 4320 @
++ *                                   0x9c000000，见 99 台账 2026-11-08 日志环），逐行拷贝（源行距 4352≠目标 4320）
++ *   hakios_tl                    —— 转发内核控制台
++ *   HakiosGPUStart/Stop          —— IOKit GPU 服务（hakios_gpu.cpp）尚未接入（C5.4），bring-up 阶段空操作并声明
++ */
++#include <mach/mach_types.h>
++#include <mach/vm_param.h>
++#include <libkern/libkern.h>
++#include <pexpert/pexpert.h>
++
++extern void MiniIOMobileFramebufferShow(const uint8_t *pixels, uint32_t width, uint32_t height, uint32_t row_bytes);
++
++#define CEPH_FB_PHYS    0x9c000000ULL   /* 本机实采：sweet AppleCLCD 帧缓冲基址（99 台账 2026-11-08） */
++#define CEPH_FB_WIDTH   1080
++#define CEPH_FB_HEIGHT  2400
++#define CEPH_FB_STRIDE  4320            /* 1080 × 4 字节 */
++
++void
++MiniIOMobileFramebufferShow(const uint8_t *pixels, uint32_t width, uint32_t height, uint32_t row_bytes)
++{
++	uint32_t r;
++	vm_offset_t fb;
++
++	if (width != CEPH_FB_WIDTH || height != CEPH_FB_HEIGHT) {
++		printf("adreno-glue: unexpected surface %ux%u (panel is 1080x2400)\n", width, height);
++		return;
++	}
++	fb = ml_io_map((vm_offset_t)CEPH_FB_PHYS, CEPH_FB_STRIDE * CEPH_FB_HEIGHT);
++	if (!fb) {
++		printf("adreno-glue: fb map failed\n");
++		return;
++	}
++	for (r = 0; r < height; r++) {
++		memcpy((void *)(fb + (vm_offset_t)r * CEPH_FB_STRIDE), pixels + (vm_offset_t)r * row_bytes, CEPH_FB_STRIDE);
++	}
++}
++
++void hakios_tl(const char *format, ...) __printflike(1, 2);
++void
++hakios_tl(const char *format, ...)
++{
++	va_list ap;
++
++	printf("tl: ");
++	va_start(ap, format);
++	vprintf(format, ap);
++	va_end(ap);
++}
++
++void HakiosGPUStart(void);
++void
++HakiosGPUStart(void)
++{
++	/* adreno_keep=1 时上游在此把 GPU 交给 IOKit 服务（hakios.gpu.cpp）；C5.4 接入前不适用 */
++	printf("adreno-glue: HakiosGPUStart(): IOKit GPU service not wired yet (C5.4); GPU stays in driver's hands\n");
++}
++
++void HakiosGPUStop(void);
++void
++HakiosGPUStop(void)
++{
++	/* 客户端锁/服务停止在上游走 IOKit；bring-up 阶段无服务可停 */
 +}
 diff --git a/bsd/sys/hakios.input.h b/bsd/sys/hakios.input.h
 new file mode 100644

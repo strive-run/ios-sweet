@@ -1,0 +1,280 @@
+--- hakios.adreno.c (642L upstream 63fc2b4)
++++ hakios_adreno_a640.c (cepheus)
+@@ -33,16 +33,16 @@
+  *              and which firmware images it says it authenticates
+  *  12  asks    TrustZone to check the signature of the GPU's "zap shader", the signed image
+  *              without which the 3D core stays locked in secure mode: its header goes from the
+- *              small image (fw/a660_zap.mdt) into memory of ours that TrustZone is pointed at
++ *              small image (fw/a640_zap.mdt) into memory of ours that TrustZone is pointed at
+  *  13  writes  page tables for the memory the GMU's firmware asks for, and the SMMU: a
+  *              translation context with those tables, and the GMU's requests sent through it
+- *  14  writes  the GMU's firmware (fw/a660_gmu.bin) into its own memory and into that memory
++ *  14  writes  the GMU's firmware (fw/a640_gmu.bin) into its own memory and into that memory
+  *  15  writes  the GMU's configuration, and lets its processor out of reset: the firmware runs
+  *  16  writes  the GMU's connection to RPMh; starts its message queues ("HFI")
+  *  17  talks   to the GMU: the tables it needs, and the request to power the 3D core, whose
+  *              registers are then read
+  *  18  writes  the 3D core's translation context, with its ring and its microcode
+- *              (fw/a660_sqe.fw) in it
++ *              (fw/a630_sqe.fw) in it
+  *  19  asks    TrustZone to load the zap shader (and first to give up the one a kernel before
+  *              this one may have left; the stop at the end of a run asks for that too)
+  *  20  writes  the 3D core's registers; starts its command processor and gives it its first
+@@ -53,7 +53,7 @@
+  * switched off: nothing of the GPU block outlives the run (its SMMU contexts point into this
+  * kernel's memory), and the next one starts from what the phone's own start leaves.
+  *
+- * The firmware is the phone's own, from /vendor/firmware of its Android. There is no register that holds the chip ID (0x06030500,
++ * The firmware is the phone's own, from /vendor/firmware of its Android. There is no register that holds the chip ID (0x06040001,
+  * "qcom,chipid" in the device tree): the fuses of step 2 are all the hardware says about
+  * itself, and the GMU's version is a property of its firmware.
+  *
+@@ -69,8 +69,9 @@
+  *   adreno_keep=1      with adreno=21: the GPU is not stopped again but kept for the system to draw
+  *                      with, through the service HakiosGPU (see "the GPU kept on" below); it is
+  *                      given back when the run ends (adreno_dirty=1: left as a panic leaves it)
+- *   adreno_speed=N     step 17 asks the GMU for the 3D core's Nth speed: 1 315 MHz, 2 450 MHz,
+- *                      3 550 MHz (the default: the most this phone's GPU is rated for)
++ *   adreno_speed=N     step 17 asks the GMU for the 3D core's Nth speed: 1 257 MHz, 2 345 MHz,
++ *                      3 427 MHz, 4 499 MHz, 5 585 MHz, 6 675 MHz (sm8150 OPP; the default: the
++ *                      most this phone's GPU is rated for)
+  *   adreno_blind=1     step 20 starts the command processor with its microcode nowhere, and
+  *   adreno_stream1=N   step 18 leaves the core's second stream out (0) or gives it an empty
+  *                      context of its own (2): what the SMMU then records shows what the core
+@@ -410,10 +411,10 @@
+  * (sc7280.dtsi: efuse@784000), and that is the copy it reads under this hypervisor on sibling
+  * boards; so that one first.
+  */
+-static struct block qfprom = { "qfprom", 0x00780000, 0x7000 };
++static struct block qfprom = { "qfprom", 0x00784000, 0x9000 };   /* sm8150: efuse@784000 */
+ #define QFPROM_CORRECTED        0x4000
+-#define QFPROM_GPU_SPEED_BIN    0x1e9
+-#define QFPROM_GPU_GAMING_BIN   0x1f5
++#define QFPROM_GPU_SPEED_BIN    0x133   /* sm8150: gpu-speed-bin@133 bits 5-7 (3 bits) */
++#define QFPROM_GPU_GAMING_BIN   0x1f5   /* sm8150 无 gaming bin 熔丝，读数恒 0 */
+ 
+ static uint32_t
+ get8(struct block *b, const char *name, uint32_t offset)
+@@ -459,7 +460,7 @@
+  * registers answer only while gcc_gpu_cfg_ahb runs, which Linux turns on for good when it
+  * starts (gcc-sc7280.c, the end of the probe function).
+  */
+-static struct block gpucc = { "gpucc", 0x03d90000, 0x9000 };
++static struct block gpucc = { "gpucc", 0x02c90000, 0x9000 };   /* sm8150: gpucc@2c90000 */
+ #define GPUCC_PLL0_MODE         0x0000          /* the 3D core's PLL: bit 31 locked, bit 0 output on; +4: times 19.2 MHz */
+ #define GPUCC_PLL1_MODE         0x0100          /* a 500 MHz PLL, an alternative source for the GMU's clock */
+ #define GPUCC_CXO_AON_CBCR      0x1004
+@@ -887,7 +888,7 @@
+ /*
+  * dt: qcom,gmu "kgsl_gmu_reg" at 0x3d6a000, 0x34000 long. Offsets in a6xx_gmu.xml are in words.
+  */
+-static struct block gmu = { "gmu", 0x03d6a000, 0x34000 };
++static struct block gmu = { "gmu", 0x02c6a000, 0x30000 };   /* sm8150: gmu@2c6a000 reg 0x30000 */
+ #define GMU_WORD(n)             (4u * (n))
+ #define GMU_DTCM                GMU_WORD(0x1c00)        /* the processor's 16K of data memory (its code: 0x0c00) */
+ #define GMU_DTCM_VERSIONS       GMU_WORD(0x1c00 + 0xff8) /* five words where loaded firmware carries its versions */
+@@ -913,11 +914,11 @@
+  * which is in the CX half: the vendor's driver writes GBIF_HALT before it starts the GMU.
+  * "cx_misc" at 0x3d9e000 is a page of odds and ends in the CX half.
+  */
+-static struct block gbif = { "gbif", 0x03d00000 + 4 * 0x3c00, 0x1000 };
++static struct block gbif = { "gbif", 0x02c00000 + 4 * 0x3c00, 0x1000 };   /* gpu 基址随 sm8150 */
+ #define GBIF_SCACHE_CNTL0       (4 * 0x01)
+ #define GBIF_HALT               (4 * 0x45)
+ #define GBIF_HALT_ACK           (4 * 0x46)
+-static struct block cx_misc = { "cx_misc", 0x03d9e000, 0x1000 };
++static struct block cx_misc = { "cx_misc", 0x02c9e000, 0x1000 };   /* 随 gpucc 基址平移 */
+ #define CX_MISC_SYSTEM_CACHE_CNTL_0 (4 * 1)
+ #define CX_MISC_SYSTEM_CACHE_CNTL_1 (4 * 2)
+ 
+@@ -973,7 +974,7 @@
+  * kernel asks RPMh for the touch screen's supply, but the GMU's own; through them its firmware
+  * raises the 3D core's rail. Offsets in words: a6xx_gmu.xml, domain A6XX_RSCC.
+  */
+-static struct block rscc = { "rscc", 0x03de0000, 0x2000 };
++static struct block rscc = { "rscc", 0x02cde000, 0x2000 };   /* UNVERIFIED: sm8150 无独立 RSCC 节点，按 delta 平移；仅调试读 */
+ #define RSCC_RSC_STATUS0_DRV0   (4 * 0x004)
+ #define RSCC_PDC_SLAVE_ID_DRV0  (4 * 0x00b)
+ #define RSCC_SEQ_BUSY_DRV0      (4 * 0x101)
+@@ -1033,7 +1034,7 @@
+  * and qcom,gmu, "iommus"): 0 the GPU, 1 its low-priority twin, 2 secure content, 5 the GMU.
+  * The global registers here are the ones the hypervisor imitates; offsets: arm-smmu.h.
+  */
+-static struct block smmu = { "smmu", 0x03da0000, 0x20000 };
++static struct block smmu = { "smmu", 0x02ca0000, 0x20000 };   /* sm8150: adreno_smmu iommu@2ca0000 */
+ #define SMMU_SCR0               0x000
+ #define SMMU_IDR0               0x020           /* [7:0] stream match registers */
+ #define SMMU_IDR1               0x024           /* bit 31: 64K pages, [30:28] log2(pages)-1, [7:0] translation contexts */
+@@ -1630,7 +1631,7 @@
+ /*
+  * The first of the three calls with which Linux has a zap shader loaded (mdt_loader.c:
+  * qcom_mdt_pas_init, qcom_scm.c: qcom_scm_pas_init_image): TrustZone is given the image's header --
+- * the ELF header and the block of hashes and certificates, which is all of the file a660_zap.mdt
++ * the ELF header and the block of hashes and certificates, which is all of the file a640_zap.mdt
+  * -- and checks the signature. Nothing of the GPU is involved, so it can be asked now. The other
+  * two (where the image will be, and "authenticate and start") need the 3D core powered.
+  *
+@@ -1648,7 +1649,7 @@
+ 	uint64_t size = 0;
+ 	uint32_t segments, hashes;
+ 
+-	header = image_file("fw", "a660_zap.mdt", &size);
++	header = image_file("fw", "a640_zap.mdt", &size);
+ 	if (header == NULL) {
+ 		return false;
+ 	}
+@@ -1682,7 +1683,7 @@
+ 	uint64_t header = 0, answer = ~0ull;
+ 	int32_t result;
+ 
+-	announce("find the zap shader's header, fw/a660_zap.mdt, in the small image that came with the kernel");
++	announce("find the zap shader's header, fw/a640_zap.mdt, in the small image that came with the kernel");
+ 	if (!zap_header(&header)) {
+ 		return false;
+ 	}
+@@ -1743,8 +1744,8 @@
+ 	if (!cx_ready()) {
+ 		return false;
+ 	}
+-	announce("find the GMU's firmware, fw/a660_gmu.bin, in the small image, and make the memory it asks for");
+-	gmu_firmware = image_file("fw", "a660_gmu.bin", &gmu_firmware_size);
++	announce("find the GMU's firmware, fw/a640_gmu.bin, in the small image, and make the memory it asks for");
++	gmu_firmware = image_file("fw", "a640_gmu.bin", &gmu_firmware_size);
+ 	if (gmu_firmware == NULL) {
+ 		return false;
+ 	}
+@@ -1878,7 +1879,7 @@
+ #define GMU_RSCC_CONTROL_REQ    GMU_WORD(0x9307)
+ #define GMU_AO_AHB_FENCE_CTRL   GMU_WORD(0x9310)
+ #define GMU_AHB_FENCE_RANGE_0   GMU_WORD(0x9311)
+-#define GMU_CHIP                0x06035000      /* dt qcom,chipid 0x06030500 the way the firmware wants it */
++#define GMU_CHIP                0x06040000      /* dt qcom,chipid 0x06040001 per a6xx_gmu.c GMU layout formula */
+ #define GMU_STARTED_MASK        0x1ff           /* of fw_init_result, for firmware newer than core 0x20010004 */
+ #define GMU_STARTED             0x100
+ #define GMU_FAILED              0xe00
+@@ -2287,7 +2288,7 @@
+ {
+ 	static const struct {
+ 		uint32_t khz, level;
+-	} speeds[] = { { 0, 0 }, { 315000, 64 }, { 450000, 128 }, { 550000, 192 } };
++	} speeds[] = { { 0, 0 }, { 257000, 16 }, { 345000, 48 }, { 427000, 112 }, { 499200, 192 }, { 585000, 224 }, { 675000, 256 } };
+ 	static struct hfi_perf_table perf;
+ 	static struct hfi_bw_table bw;
+ 	uint32_t core_start[2] = { 0, 0 }, start[1] = { 0 }, vote[4] = { 0, 1, 3, HFI_NO_INDEX }, granted = 0, speed = 0;
+@@ -2390,7 +2391,7 @@
+ 
+ /*
+  * The 3D core takes its orders as words in a ring of memory, which a small processor inside it
+- * ("SQE", with microcode of its own: a660_sqe.fw) reads up to where a register says we have
++ * ("SQE", with microcode of its own: a630_sqe.fw) reads up to where a register says we have
+  * written. Like the GMU it reaches memory through the SMMU: stream 0, to which this gives
+  * context 0, with tables of ours that hold the ring, the microcode and later what is drawn into.
+  * What is written to the core's registers before its processor is started, and in what order,
+@@ -2566,8 +2567,8 @@
+ 		return false;
+ 	}
+ 	PE_parse_boot_argn("adreno_stream1", &stream1, sizeof(stream1));
+-	announce("make the 3D core's memory: its ring, its microcode (fw/a660_sqe.fw), a page to try writing to");
+-	microcode = image_file("fw", "a660_sqe.fw", &size);
++	announce("make the 3D core's memory: its ring, its microcode (fw/a630_sqe.fw), a page to try writing to");
++	microcode = image_file("fw", "a630_sqe.fw", &size);
+ 	if (microcode == NULL || size < 8 || size > 0x40000 ||
+ 	    !block_new(&core_space, &core_ring, CORE_RING_ADDRESS, CORE_RING_SIZE, PTE_CORE) ||
+ 	    !block_new(&core_space, &core_sqe, CORE_SQE_ADDRESS, (uint32_t)size - 4, PTE_CORE | PTE_READ_ONLY) ||
+@@ -2607,7 +2608,7 @@
+  * qcom_mdt_load; adreno_gpu.c: zap_shader_load_mdt): after the header (step 12), TrustZone is
+  * told where the image will be -- the two pages the device tree reserves for it
+  * (reserved-memory gpu_micro_code@8b71a000, the zap-shader node's memory-region) --, the image's
+- * one segment (the file a660_zap.b02, relocatable: at the start of that memory) is put there,
++ * one segment (the file a640_zap.b02, relocatable: at the start of that memory) is put there,
+  * and TrustZone is asked to authenticate it and run it. The vendor's driver does this before it
+  * starts the 3D core's command processor (a6xx_rb_start: a6xx_microcode_load), Linux after;
+  * this phone's own order is kept. Once that is done the memory is TrustZone's, and nothing
+@@ -2651,7 +2652,7 @@
+ 	announce("ask TrustZone to give up a zap shader that a kernel before this one may have left");
+ 	printf("adreno: %u: %s\n", step, zap_unload() ? "TrustZone has given up what it had (it says so with none, too)" :
+ 	    "TRUSTZONE DOES NOT GIVE IT UP: the next answers tell whether it keeps one");
+-	segment = image_file("fw", "a660_zap.b02", &size);
++	segment = image_file("fw", "a640_zap.b02", &size);
+ 	if (segment == NULL || size == 0 || size > 0x1000) {
+ 		return false;
+ 	}
+@@ -2729,26 +2730,24 @@
+ 	put(&gpu, "uche_cache_ways", UCHE_CACHE_WAYS, 0x4);
+ 	put(&gpu, "cp_roq_thresholds_2", CP_ROQ_THRESHOLDS_2, 0x02000140);
+ 	put(&gpu, "cp_roq_thresholds_1", CP_ROQ_THRESHOLDS_1, 0x8040362c);
+-	put(&gpu, "cp_lpac_prog_fifo_size", CP_LPAC_PROG_FIFO_SIZE, 0x20);
+ 	put(&gpu, "cp_mem_pool_size", CP_MEM_POOL_SIZE, 128);
+-	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00200200);
++	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00180000);   /* a640 prim_fifo_threshold (a6xx_catalog.c) */
+ 	put(&gpu, "cp_ahb_cntl", CP_AHB_CNTL, 1);
+ 	/*
+ 	 * How textures in the GPU's own tiled and compressed layouts are laid out in memory (Linux's
+ 	 * a6xx_calc_ubwc_config, a6xx_set_ubwc_config for this GPU: highest bank bit 14, and the
+ 	 * rest as below); Mesa is told the same (hakios_gpu_parameter()).
+ 	 */
+-	put(&gpu, "rb_nc_mode_cntl", GPU_WORD(0x8e08), 1u << 11 | 1u << 4 | 1u << 1);
+-	put(&gpu, "tpl1_nc_mode_cntl", GPU_WORD(0xb604), 1u << 1);
+-	put(&gpu, "sp_nc_mode_cntl", GPU_WORD(0xae02), 2u << 4 | 1u << 1);
+-	put(&gpu, "uche_mode_cntl", GPU_WORD(0x0e01), 1u << 21);
+-	put(&gpu, "rbbm_nc_mode_cntl", GPU_WORD(0x0534), 1);
++	put(&gpu, "rb_nc_mode_cntl", GPU_WORD(0x8e08), 1u << 12 | 2u << 1);   /* sm8150: lvl2_swizz_dis + hbb_lo=2 */
++	put(&gpu, "tpl1_nc_mode_cntl", GPU_WORD(0xb604), 1u << 6 | 2u << 1);   /* sm8150 */
++	put(&gpu, "sp_nc_mode_cntl", GPU_WORD(0xae02), 1u << 12 | 2u << 1);   /* sm8150: 无 uavflagprd_inv (gen2) */
++	put(&gpu, "uche_mode_cntl", GPU_WORD(0x0e01), 2u << 21);   /* sm8150: hbb_lo=2, 无 min_acc_len */
++	put(&gpu, "rbbm_nc_mode_cntl", GPU_WORD(0x0534), 0);   /* sm8150: macrotile_mode=0 */
+ 	put(&gpu, "rbbm_perfctr_cntl", RBBM_PERFCTR_CNTL, 1);
+ 	put(&gpu, "rbbm_interface_hang_int_cntl", RBBM_INTERFACE_HANG_INT_CNTL, 1u << 30 | 0x1fffff);
+ 	put(&gpu, "uche_client_pf", UCHE_CLIENT_PF, 1u << 7 | 1);
+ 	put(&gpu, "cp_chicken_dbg", CP_CHICKEN_DBG, 1);
+ 	put(&gpu, "rbbm_gbif_client_qos_cntl", RBBM_GBIF_CLIENT_QOS_CNTL, 0);
+-	put(&gpu, "cp_apriv_cntl", CP_APRIV_CNTL, 1u << 6 | 1u << 5 | 1u << 3 | 1u << 2 | 1u << 1);
+ 	put(&gpu, "rb_dbg_eco_cntl", RB_DBG_ECO_CNTL, 0x04100000);     /* Mesa's value for this GPU */
+ 	/*
+ 	 * adreno_blind=1: the command processor is started with its microcode at an address where
+@@ -3168,7 +3167,7 @@
+  * far it has got (a "fence": a submission's number, written by the core when it is through
+  * with it). The caller holds one lock around all of these.
+  */
+-#define GPU_CHIP_ID             0x06030500ull   /* dt: qcom,chipid */
++#define GPU_CHIP_ID             0x06040001ull   /* dt: qcom,chipid (sm8150 dtsi gpu@2c00000, adreno-640.1; kernel a6xx_catalog.c:1028) */
+ #define GPU_ADDRESSES_START     0x20000000ull   /* above everything the steps use; below 4 GB, as Linux keeps them */
+ #define GPU_ADDRESSES_SIZE      0xe0000000ull
+ #define GPU_FENCE_AT            0x40            /* in the scratch page */
+@@ -3725,7 +3724,7 @@
+ static bool
+ start_by_itself(void)
+ {
+-	static const char *const files[] = { "a660_gmu.bin", "a660_sqe.fw", "a660_zap.mdt", "a660_zap.b02" };
++	static const char *const files[] = { "a640_gmu.bin", "a630_sqe.fw", "a640_zap.mdt", "a640_zap.b02" };
+ 	const char *missing = NULL;
+ 	uint64_t size;
+ 
+
+--- a6xx.hpp (upstream)
++++ a6xx_a640.hpp (cepheus)
+@@ -1,5 +1,5 @@
+ // The Adreno A6xx registers, packet words and descriptor fields a compute dispatch and one draw write, for the Adreno
+-// 7c+ Gen 3 (the A635 family, chip id 0x06030500: Mesa's "a6xx gen4", the same generation as the A660).
++// A640 (chip id 0x06040001: Mesa's "a6xx gen2", the a630/a640/a680 generation; freedreno_devices.py GPUId(640)).
+ //
+ // Every number here is Mesa 25.0.7's (MIT), from the register XML in src/freedreno/registers/adreno/ (a6xx.xml,
+ // adreno_pm4.xml, adreno_common.xml) through the headers Mesa's build generates from it: a6xx.xml.h,
+@@ -27,13 +27,13 @@
+ // From Mesa's src/freedreno/common/freedreno_devices.py: the entry for chip_id ...06030500 ("Adreno 7c+ Gen 3", every
+ // speedbin of the A635) is a6xx_base + a6xx_gen4 with num_ccu = 2.
+ 
+-inline constexpr uint32_t kChipId = 0x06030500;             // not-in-headers: freedreno_devices.py GPUId(chip_id=0x..06030500)
+-inline constexpr bool kHasLpac = true;                       // not-in-headers: freedreno_devices.py a6xx_gen4.has_lpac
++inline constexpr uint32_t kChipId = 0x06040001;             // not-in-headers: freedreno_devices.py GPUId(chip_id=0x..06030500)
++inline constexpr bool kHasLpac = false;                       // not-in-headers: freedreno_devices.py a6xx_gen4.has_lpac
+ inline constexpr bool kSupportsDoubleThreadsize = true;      // not-in-headers: freedreno_devices.py a6xx_base.supports_double_threadsize
+ // CP_LOAD_STATE6_0_NUM_UNIT for a shader (ST6_SHADER) is capped at this many instruction groups: Mesa's comment says
+ // the blob allows 128 but 128 hangs this generation, so 127 it is (a longer shader is fetched past the preload).
+-inline constexpr uint32_t kInstrCacheSize = 127;             // not-in-headers: freedreno_devices.py a6xx_gen4.instr_cache_size
+-inline constexpr uint32_t kFibersPerSp = 128 * 2 * 16;       // not-in-headers: freedreno_devices.py, the A635 entry (fibers_per_sp)
++inline constexpr uint32_t kInstrCacheSize = 64;             // not-in-headers: freedreno_devices.py a6xx_gen4.instr_cache_size
++inline constexpr uint32_t kFibersPerSp = 128 * 4 * 16;       // not-in-headers: freedreno_devices.py, the A635 entry (fibers_per_sp)
+ inline constexpr uint32_t kNumSpCores = 2;                   // not-in-headers: freedreno_devices.py num_sp_cores = num_ccu for the A635
+ inline constexpr uint32_t kCsSharedMemSize = 32 * 1024;      // not-in-headers: freedreno_devices.py, the A635 entry (cs_shared_mem_size)
+ inline constexpr uint32_t kThreadsizeBase = 64;              // not-in-headers: freedreno_devices.py A6xxGPUInfo default threadsize_base

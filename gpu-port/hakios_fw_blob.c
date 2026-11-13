@@ -8,13 +8,9 @@
  *   a640_gmu.bin       —— Mi 9 vendor 版，与上游 linux-firmware 逐字节一致
  * 再生成：python3 gen-fw-blob.py（gpu-port/）
  */
-
-struct hakios_fw_file {
-	const char *dir;
-	const char *name;
-	const uint8_t *data;
-	uint64_t size;
-};
+#include <sys/types.h>
+#include <stdint.h>
+#include <sys/hakios_fw.h>
 
 static const uint8_t hakios_fw_a630_sqe_fw[] = {
 	0x00,0x00,0x00,0x00,0x90,0xe1,0x6e,0x01,0x0b,0x1f,0x00,0x01,0x00,0x00,0x00,0x01,

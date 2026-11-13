@@ -19,14 +19,9 @@ lines = ["""/*
  *   a640_gmu.bin       —— Mi 9 vendor 版，与上游 linux-firmware 逐字节一致
  * 再生成：python3 gen-fw-blob.py（gpu-port/）
  */""",
+"#include <sys/types.h>",
 "#include <stdint.h>",
-"",
-"struct hakios_fw_file {",
-"\tconst char *dir;",
-"\tconst char *name;",
-"\tconst uint8_t *data;",
-"\tuint64_t size;",
-"};",
+"#include <sys/hakios_fw.h>",
 ""]
 for d, n, p in files:
     data = p.read_bytes()

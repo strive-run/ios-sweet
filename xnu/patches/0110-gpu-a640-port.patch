@@ -3871,10 +3871,10 @@ index 0000000..5b7ba92
 +}
 diff --git a/bsd/dev/hakios_fw_blob.c b/bsd/dev/hakios_fw_blob.c
 new file mode 100644
-index 0000000..e2afce5
+index 0000000..3765fc7
 --- /dev/null
 +++ b/bsd/dev/hakios_fw_blob.c
-@@ -0,0 +1,4967 @@
+@@ -0,0 +1,4963 @@
 +/*
 + * hakios_fw_blob.c —— a640 固件内嵌（cepheus 第一批 bring-up 专用）
 + *
@@ -3885,13 +3885,9 @@ index 0000000..e2afce5
 + *   a640_gmu.bin       —— Mi 9 vendor 版，与上游 linux-firmware 逐字节一致
 + * 再生成：python3 gen-fw-blob.py（gpu-port/）
 + */
-+
-+struct hakios_fw_file {
-+	const char *dir;
-+	const char *name;
-+	const uint8_t *data;
-+	uint64_t size;
-+};
++#include <sys/types.h>
++#include <stdint.h>
++#include <sys/hakios_fw.h>
 +
 +static const uint8_t hakios_fw_a630_sqe_fw[] = {
 +	0x00,0x00,0x00,0x00,0x90,0xe1,0x6e,0x01,0x0b,0x1f,0x00,0x01,0x00,0x00,0x00,0x01,
@@ -8844,10 +8840,10 @@ index 0000000..e2afce5
 +};
 diff --git a/bsd/dev/hakios_glue.c b/bsd/dev/hakios_glue.c
 new file mode 100644
-index 0000000..07d464d
+index 0000000..ea85131
 --- /dev/null
 +++ b/bsd/dev/hakios_glue.c
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,127 @@
 +/*
 + * hakios_glue.c — 小米9 (cepheus) 移植垫片：hakios GPU 驱动依赖的宿主环境入口。
 + *
@@ -8862,6 +8858,9 @@ index 0000000..07d464d
 +#include <sys/systm.h>
 +#include <sys/systm.h>
 +#include <sys/hakios.input.h>
++#include <sys/hakios_fw.h>
++#include <sys/stdarg.h>
++#include <string.h>
 +
 +void loader_log_putc(char c);
 +void
@@ -8919,6 +8918,7 @@ index 0000000..07d464d
 +#include <pexpert/pexpert.h>
 +
 +extern void MiniIOMobileFramebufferShow(const uint8_t *pixels, uint32_t width, uint32_t height, uint32_t row_bytes);
++extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 +
 +#define CEPH_FB_PHYS    0x9c000000ULL   /* 本机实采：sweet AppleCLCD 帧缓冲基址（99 台账 2026-11-08） */
 +#define CEPH_FB_WIDTH   1080
@@ -9104,3 +9104,28 @@ index 0000000..bfb7d63
 +#endif
 +
 +#endif /* _SYS_HAKIOS_INPUT_H_ */
+diff --git a/bsd/sys/hakios_fw.h b/bsd/sys/hakios_fw.h
+new file mode 100644
+index 0000000..e7484f7
+--- /dev/null
++++ b/bsd/sys/hakios_fw.h
+@@ -0,0 +1,19 @@
++/*
++ * hakios_fw.h —— 内嵌 a640 固件 blob 的共享描述（hakios_fw_blob.c 数据 / hakios_glue.c 查表）
++ */
++#ifndef _SYS_HAKIOS_FW_H_
++#define _SYS_HAKIOS_FW_H_
++
++#include <stdint.h>
++#include <sys/types.h>
++
++struct hakios_fw_file {
++	const char *dir;
++	const char *name;
++	const uint8_t *data;
++	uint64_t size;
++};
++
++extern const struct hakios_fw_file *const hakios_fw_table[];
++
++#endif /* _SYS_HAKIOS_FW_H_ */

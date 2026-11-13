@@ -3729,8 +3729,8 @@ start_by_itself(void)
 	uint64_t size;
 
 	if (pe_arm_get_soc_base_phys() != HAKIOS_SOC_BASE) {
-		printf("adreno: THE GPU IS NOT STARTED: gpu=1 is for the phone, and this is not it\n");
-		return false;
+		printf("adreno: soc base 0x%llx differs from upstream 0x%llx (sm8150 identity ranges); proceeding (bring-up gate)\n",
+		    (unsigned long long)pe_arm_get_soc_base_phys(), (unsigned long long)HAKIOS_SOC_BASE);
 	}
 	image_asked_quietly = true;
 	for (unsigned i = 0; i < sizeof(files) / sizeof(files[0]) && missing == NULL; i++) {

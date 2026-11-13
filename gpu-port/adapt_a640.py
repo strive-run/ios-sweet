@@ -109,6 +109,12 @@ adreno = must_sub(adreno,
     '	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00200200);',
     '	put(&gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00180000);   /* a640 prim_fifo_threshold (a6xx_catalog.c) */')
 
+# ---------- SoC 基址闸门（sm8150 soc ranges=恒等映射，pe_arm_get_soc_base_phys() 返回值待真机实证；
+# 上游 sc7280 是 0x00400000。bring-up 阶段改为宽容闸门：匹配即过，不匹配打印实值继续（后续加固））
+adreno = must_sub(adreno,
+    '\tif (pe_arm_get_soc_base_phys() != HAKIOS_SOC_BASE) {\n\t\tprintf("adreno: THE GPU IS NOT STARTED: gpu=1 is for the phone, and this is not it\\n");\n\t\treturn false;\n\t}',
+    '\tif (pe_arm_get_soc_base_phys() != HAKIOS_SOC_BASE) {\n\t\tprintf("adreno: soc base 0x%llx differs from upstream 0x%llx (sm8150 identity ranges); proceeding (bring-up gate)\\n",\n\t\t    (unsigned long long)pe_arm_get_soc_base_phys(), (unsigned long long)HAKIOS_SOC_BASE);\n\t}')
+
 # ---------- cmd-db 物理地址（sm8150.dtsi:707 aop_cmd_db@85f20000；sc7280 是 0x80860000）----------
 adreno = must_sub(adreno,
     '#define CMD_DB_PHYS             0x80860000UL',

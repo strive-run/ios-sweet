@@ -8840,7 +8840,7 @@ index 0000000..3765fc7
 +};
 diff --git a/bsd/dev/hakios_glue.c b/bsd/dev/hakios_glue.c
 new file mode 100644
-index 0000000..ea85131
+index 0000000..de83915
 --- /dev/null
 +++ b/bsd/dev/hakios_glue.c
 @@ -0,0 +1,127 @@
@@ -8859,7 +8859,7 @@ index 0000000..ea85131
 +#include <sys/systm.h>
 +#include <sys/hakios.input.h>
 +#include <sys/hakios_fw.h>
-+#include <sys/stdarg.h>
++#include <stdarg.h>
 +#include <string.h>
 +
 +void loader_log_putc(char c);
